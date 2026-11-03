@@ -29,6 +29,77 @@ export interface ResearchProvider {
   search(input: SearchRequest): Promise<EvidenceItem[]>;
 }
 
+/**
+ * Firecrawl API Research Provider
+ * Uses Firecrawl search to retrieve live crawled documents and government notifications.
+ */
+export class FirecrawlResearchProvider implements ResearchProvider {
+  private apiKey: string;
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  async search(input: SearchRequest): Promise<EvidenceItem[]> {
+    try {
+      const searchQuery = `${input.query} ${input.locationName || ""}`.trim();
+      const res = await fetch("https://api.firecrawl.dev/v1/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          query: searchQuery,
+          limit: 5,
+          scrapeOptions: {
+            formats: ["markdown"]
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`Firecrawl search error (${res.status}): ${err.slice(0, 150)}`);
+        return new CuratedEvidenceProvider().search(input);
+      }
+
+      const data = await res.json();
+      if (!data.success || !Array.isArray(data.data) || data.data.length === 0) {
+        return new CuratedEvidenceProvider().search(input);
+      }
+
+      const now = new Date().toISOString();
+      return data.data.map((item: any) => {
+        let domain = "";
+        try {
+          domain = new URL(item.url).hostname.replace(/^www\./, "");
+        } catch (_e) {
+          domain = "external-web";
+        }
+
+        const isGov = domain.includes(".gov") || domain.includes(".nic.");
+        const excerptText = item.description || item.markdown?.slice(0, 300) || "";
+
+        return {
+          title: item.title || `Report from ${domain}`,
+          source_name: domain,
+          source_type: isGov ? "government" : "news",
+          url: item.url,
+          excerpt: excerptText.replace(/\n+/g, " ").trim(),
+          published_at: item.published_date || item.metadata?.publishedTime || null,
+          retrieved_at: now,
+          stance: "supports",
+          reliability: isGov ? "high" : "medium"
+        };
+      });
+    } catch (err: any) {
+      console.warn("Firecrawl search exception, falling back:", err.message);
+      return new CuratedEvidenceProvider().search(input);
+    }
+  }
+}
+
 export class LiveSearchProvider implements ResearchProvider {
   private apiKey: string;
   private providerName: string;
@@ -159,7 +230,6 @@ export class CuratedEvidenceProvider implements ResearchProvider {
     const cat = (input.category || "").toLowerCase();
 
     const matches = this.curatedNotices.filter(item => {
-      // Check category/keyword matching
       const matchesKeywords = item.keywords.some(k => q.includes(k) || cat.includes(k));
       const matchesLoc = item.locationMatch ? loc.includes(item.locationMatch.toLowerCase()) || q.includes(item.locationMatch.toLowerCase()) : true;
       return matchesKeywords || matchesLoc;
@@ -169,7 +239,6 @@ export class CuratedEvidenceProvider implements ResearchProvider {
       return matches.map(m => ({ ...m, retrieved_at: new Date().toISOString() }));
     }
 
-    // Default contextual evidence if no exact match found
     return [
       {
         title: `Official Environmental Dataset & Gazette Registry for ${input.locationName || "Reported Area"}`,
@@ -187,11 +256,19 @@ export class CuratedEvidenceProvider implements ResearchProvider {
 }
 
 export function getResearchProvider(): ResearchProvider {
+  // Check for Firecrawl API Key first
+  const firecrawlKey = (globalThis as any).Deno?.env?.get("FIRECRAWL_API_KEY") ?? process.env.FIRECRAWL_API_KEY;
+  if (firecrawlKey && firecrawlKey !== "YOUR_FIRECRAWL_API_KEY") {
+    return new FirecrawlResearchProvider(firecrawlKey);
+  }
+
+  // Check for generic search key (e.g. Tavily)
   const apiKey = (globalThis as any).Deno?.env?.get("SEARCH_API_KEY") ?? process.env.SEARCH_API_KEY;
   const provider = (globalThis as any).Deno?.env?.get("SEARCH_PROVIDER") ?? process.env.SEARCH_PROVIDER ?? "tavily";
 
   if (apiKey && apiKey !== "YOUR_SEARCH_PROVIDER_KEY") {
     return new LiveSearchProvider(apiKey, provider);
   }
+
   return new CuratedEvidenceProvider();
 }
