@@ -1,0 +1,15 @@
+project_id = "enviro-ment"
+
+[api]
+port = 54321
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
