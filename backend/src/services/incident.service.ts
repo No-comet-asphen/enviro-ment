@@ -83,6 +83,11 @@ export function handleCreateReport(input: CreateReportInput) {
   };
   db.timeline.set(timelineEvent.id, timelineEvent);
 
+  // Sync to live Supabase in background
+  db.syncIncident(linkedIncident);
+  db.syncReport(report);
+  db.syncTimeline(timelineEvent);
+
   return {
     report_id: reportId,
     incident_id: linkedIncident.id,

@@ -8,6 +8,7 @@ import type {
   TimelineEvent,
   Subscription
 } from "./types.ts";
+import { getSupabaseClient } from "./supabase.client.ts";
 import crypto from "node:crypto";
 
 export function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -37,6 +38,106 @@ export class MemoryStore {
     this.seedStandards();
     this.seedMonitoringStations();
     this.seedDemoIncident();
+    this.initSupabaseSync().catch(err => {
+      console.warn("Supabase background sync notice:", err.message);
+    });
+  }
+
+  async initSupabaseSync() {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase.from("standards").select("*").eq("is_active", true);
+      if (!error && data && data.length > 0) {
+        data.forEach((std: any) => {
+          this.standards.set(std.id, std as Standard);
+        });
+        console.log(`Synced ${data.length} regulatory standards from Supabase.`);
+      }
+    } catch (_e) {}
+  }
+
+  async syncReport(report: Report) {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      await supabase.from("reports").insert({
+        id: report.id,
+        user_id: report.user_id,
+        title: report.title,
+        description: report.description,
+        category: report.category,
+        location_name: report.location_name,
+        latitude: report.latitude,
+        longitude: report.longitude,
+        observed_at: report.observed_at,
+        status: report.status,
+        incident_id: report.incident_id,
+        created_at: report.created_at
+      });
+    } catch (_e) {}
+  }
+
+  async syncIncident(incident: Incident) {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      await supabase.from("incidents").upsert({
+        id: incident.id,
+        title: incident.title,
+        summary: incident.summary,
+        category: incident.category,
+        status: incident.status,
+        severity: incident.severity,
+        evidence_confidence: incident.evidence_confidence,
+        escalation: incident.escalation,
+        latitude: incident.latitude,
+        longitude: incident.longitude,
+        location_name: incident.location_name,
+        first_reported_at: incident.first_reported_at,
+        last_updated_at: incident.last_updated_at,
+        resolved_at: incident.resolved_at,
+        created_at: incident.created_at
+      });
+    } catch (_e) {}
+  }
+
+  async syncEvidence(ev: Evidence) {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      await supabase.from("evidence").insert({
+        id: ev.id,
+        incident_id: ev.incident_id,
+        report_id: ev.report_id,
+        source_name: ev.source_name,
+        source_type: ev.source_type,
+        title: ev.title,
+        url: ev.url,
+        excerpt: ev.excerpt,
+        published_at: ev.published_at,
+        retrieved_at: ev.retrieved_at,
+        stance: ev.stance,
+        reliability: ev.reliability,
+        content_hash: ev.content_hash,
+        metadata: ev.metadata || {}
+      });
+    } catch (_e) {}
+  }
+
+  async syncTimeline(tl: TimelineEvent) {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    try {
+      await supabase.from("incident_timeline").insert({
+        id: tl.id,
+        incident_id: tl.incident_id,
+        event_type: tl.event_type,
+        message: tl.message,
+        metadata: tl.metadata || {},
+        created_at: tl.created_at
+      });
+    } catch (_e) {}
   }
 
   private seedStandards() {

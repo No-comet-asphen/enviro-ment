@@ -47,6 +47,7 @@ export async function searchAndIngestEvidence(
       };
 
       db.evidence.set(evidenceRecord.id, evidenceRecord);
+      db.syncEvidence(evidenceRecord);
       ingested.push(evidenceRecord);
     }
   }

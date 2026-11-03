@@ -246,10 +246,22 @@ ALTER TABLE public.attachments ENABLE ROW LEVEL SECURITY;
 
 -- 15. RLS Policies
 CREATE POLICY "Public can view incidents" ON public.incidents FOR SELECT USING (true);
+CREATE POLICY "Public can insert incidents" ON public.incidents FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public can update incidents" ON public.incidents FOR UPDATE USING (true);
+
 CREATE POLICY "Public can view evidence" ON public.evidence FOR SELECT USING (true);
+CREATE POLICY "Public can insert evidence" ON public.evidence FOR INSERT WITH CHECK (true);
+
 CREATE POLICY "Public can view measurements" ON public.measurements FOR SELECT USING (quality_flag != 'invalid');
+CREATE POLICY "Public can insert measurements" ON public.measurements FOR INSERT WITH CHECK (true);
+
 CREATE POLICY "Public can view active standards" ON public.standards FOR SELECT USING (is_active = true);
+
 CREATE POLICY "Public can view incident timeline" ON public.incident_timeline FOR SELECT USING (true);
+CREATE POLICY "Public can insert incident timeline" ON public.incident_timeline FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Users can create reports" ON public.reports FOR INSERT WITH CHECK (true);
 CREATE POLICY "Users can view reports" ON public.reports FOR SELECT USING (true);
+CREATE POLICY "Users can update reports" ON public.reports FOR UPDATE USING (true);
+
+CREATE POLICY "Users can manage subscriptions" ON public.subscriptions FOR ALL USING (true);
